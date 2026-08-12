@@ -1,4 +1,5 @@
 - Ver quando é necessário incluir compactação de chat (quando começa a alucinar).
-- Ver quais problemas se deve evitar durante a compactação de chat.]
+- Ver quais problemas se deve evitar durante a compactação de chat.
 - Testar se o output de tokens é o ideal
 - Testar se a temperatura está correta
+- O plugin de compactação nativo funciona com a integração customizável do firestore?
