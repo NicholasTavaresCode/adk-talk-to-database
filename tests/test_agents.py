@@ -9,8 +9,7 @@ from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
 from talk_to_database_agent.agent import root_agent
-from talk_to_database_agent.sub_agents.bigquery.agent import database_agent
-from talk_to_database_agent.sub_agents.bqml.agent import root_agent as bqml_agent
+from talk_to_database_agent.sub_agents.bigquery_agent import bigquery_agent
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -56,25 +55,13 @@ class TestAgents(unittest.IsolatedAsyncioTestCase):
         )
         return final_response
 
-    @pytest.mark.db_agent
-    async def test_db_agent_can_handle_env_query(self):
-        """Test the db_agent with a query from environment variable."""
+    @pytest.mark.bigquery_agent
+    async def test_bigquery_agent_can_handle_env_query(self):
+        """Test the bigquery_agent with a query from environment variable."""
         query = "what countries exist in the train table?"
-        response = self._run_agent(database_agent, query)
+        response = self._run_agent(bigquery_agent, query)
         print(response)
         self.assertIsNotNone(response)
-
-    @pytest.mark.bqml
-    async def test_bqml_agent_can_execute_code(self):
-        """Test that the bqml_agent can execute BQML code."""
-        query = """
-    I want to train a BigQuery ML model on the sales_train_validation data for sales prediction.
-    Please show me an execution plan.
-    """
-        response = self._run_agent(bqml_agent, query)
-        print(response)
-        self.assertIsNotNone(response)
-
 
 if __name__ == "__main__":
     unittest.main()
