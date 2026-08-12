@@ -3,3 +3,4 @@
 - Testar se o output de tokens é o ideal
 - Testar se a temperatura está correta
 - O plugin de compactação nativo funciona com a integração customizável do firestore?
+- Adicionar testes para cada função auxiliar de checagem de sql no bigquery
