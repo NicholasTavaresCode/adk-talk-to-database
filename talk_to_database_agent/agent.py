@@ -7,6 +7,7 @@ from google.adk.plugins import ReflectAndRetryToolPlugin
 from google.genai import types
 from talk_to_database_agent.app_utils.models import GEMINI_MODEL
 from talk_to_database_agent.app_utils.math import MATH_TOOLS
+from talk_to_database_agent.app_utils.utils import build_timezone_metadata
 from talk_to_database_agent.plugins.log_plugin import LogPlugin
 
 
@@ -34,8 +35,13 @@ root_agent = Agent(
     - If you are not sure about the user query, you will ask the user for clarification before calling the "bigquery_agent" tool.
     - You will always return the results of the "bigquery_agent" tool to the user in a user-friendly format.
     - If you need to do any calculations, you will use the math tools: calculate, percentage_change and proportion. You will not do any calculations yourself.
+    - If the current date and time is relevant to the user query, you will use the "build_timezone_metadata" tool to get the current date and time in the user's timezone.
+
+    # OBSERVATIONS
+    - Always delegate the SQL query generation and execution to the "bigquery_agent" tool. Do not generate SQL queries yourself.
+    - Always use the "build_timezone_metadata" tool to get the current date and time in the user's timezone because you don't know the current date and time in the user's timezone. Do not generate the current date and time yourself.
     """,
-    tools=MATH_TOOLS,
+    tools=[build_timezone_metadata] + MATH_TOOLS,
     generate_content_config=types.GenerateContentConfig(
         temperature=0.01,
         max_output_tokens=4000,
