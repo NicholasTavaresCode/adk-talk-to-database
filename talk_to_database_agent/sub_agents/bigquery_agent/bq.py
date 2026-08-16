@@ -1,10 +1,14 @@
-import os, json, logging
+import os, logging
 from google.cloud import bigquery
 
 logger = logging.getLogger(__name__)
 
+# Cache do cliente: criar um por query desperdiça a descoberta de credenciais.
+_BQ_CLIENT: bigquery.Client | None = None
+
+
 def get_bq_client() -> bigquery.Client:
-    """Return a cached BigQuery client built from BQ_CREDENTIALS_FILE."""
+    """Devolve um cliente BigQuery em cache, autenticado via ADC."""
     global _BQ_CLIENT
     if _BQ_CLIENT is not None:
         return _BQ_CLIENT

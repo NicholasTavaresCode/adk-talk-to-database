@@ -13,6 +13,9 @@ uv run adk web                           # alternative: ADK's own dev UI over th
 uv run pytest                            # run the suite (asyncio_mode=auto, testpaths=tests)
 uv run pytest tests/test_agents.py::TestAgents::test_bigquery_agent_can_handle_env_query
 uv run ruff check .                      # lint
+
+uv run python scripts/index_schema.py --dry-run    # inspect rendered schema cards
+uv run python scripts/index_schema.py --prune      # (re)build the RAG index in Firestore
 ```
 
 Tests hit real Vertex AI and BigQuery — they are integration tests, not unit tests, and require valid ADC plus `GOOGLE_CLOUD_PROJECT`. There is currently no offline test path.
@@ -38,6 +41,16 @@ An ADK (Google Agent Development Kit) natural-language-to-SQL agent served as a 
 
 **SQL safety is layered in `tools.py`, not in the prompt.** `run_sql_query` runs `sanitize_sql` (strip markdown fences, strip trailing `;`, reject multi-statement queries — using `_mask_literals_and_comments` so keywords inside string literals don't trip it), then `check_sql_read_only` (keyword denylist), then executes and passes rows through `sanitize_value`/`sanitize_rows` to make BigQuery types JSON-safe (Decimal, datetime, bytes, non-finite floats). New validation helpers belong here as pure functions so they stay testable.
 
+**Schema RAG.** BigQuery datasets are too wide to put in the prompt, so [scripts/index_schema.py](scripts/index_schema.py) renders one "schema card" per table (description, columns + their descriptions, partitioning, 5 sample rows), embeds it, and stores the vector in Firestore. At runtime `retriever` in [sub_agents/bigquery_agent/context.py](talk_to_database_agent/sub_agents/bigquery_agent/context.py) — the BigQuery agent's `before_model_callback` — embeds the user's question, nearest-neighbours that collection, and appends the matching cards.
+
+**What gets embedded is not what gets injected.** Each table produces both a `card` (full schema, injected into the prompt) and a shorter `embed_text` (what the vector is built from). This matters for template-shaped warehouses: every table in `bigquery-public-data.epa_historical_air_quality` repeats the same ~20 boilerplate columns with byte-identical descriptions and no table description at all, so full-card embeddings are ~97% shared text and `parameter_name = "Ozone"` gets averaged into noise. `embed_text` keeps the table name (underscores split into words), column *names* only, row count, and "representative values" sampled from low-cardinality STRING columns — dropping the long column descriptions that are the boilerplate. Two filters guard that value list: purely numeric/clock-time strings (zero-padded FIPS codes, `07:00`) and row-level geography (`state_name`, `address`, `city`) are excluded, the latter because `tabledata.list` returns contiguous rows from one site, which would make "ozone in California" match a card whose sample happens to say Alaska.
+
+Two placement rules govern the callback. It appends to `llm_request.contents` and never to `config.system_instruction`, because ADK's instruction processor puts `static_instruction` at the *front* of `contents` (it runs before the contents processor) and the context cache covers that prefix — appending at the end leaves the cache intact. And it retrieves once per *invocation*, not once per model call: the agent loops write-SQL → run → interpret, the callback fires on every leg, so the rendered block is memoized in `temp:schema_context` state (`temp:` keys are invocation-scoped and never persisted by `FirestoreSessionService`) and re-appended from cache on later legs. Retrieval failures are logged and swallowed — a missing vector index degrades answer quality rather than breaking the agent.
+
+Indexer and retriever must agree exactly on model, dimensionality, normalization, and instruction prefix — a mismatch degrades recall silently rather than raising — so both import from [app_utils/embeddings.py](talk_to_database_agent/app_utils/embeddings.py) instead of re-declaring the values. Two constraints are baked in there: **Firestore's vector index caps at 2048 dimensions while `gemini-embedding-2` emits 3072 by default**, hence `EMBEDDING_DIMENSIONS = 1536` (the largest recommended MRL size that fits); and `gemini-embedding-2` has no `task_type` parameter, so asymmetric retrieval is steered by the `DOC_INSTRUCTION` / `QUERY_INSTRUCTION` prefixes. Editing either prefix invalidates the whole index.
+
+Cards are content-hashed, so re-running only re-embeds changed tables. Sampling uses `list_rows` (the free tabledata.list API) rather than `SELECT *`, and is skipped for views. The Firestore vector index is not created automatically — the script prints the required `gcloud firestore indexes composite create` command.
+
 **Session persistence.** [app_utils/firestore_session.py](talk_to_database_agent/app_utils/firestore_session.py) is a hand-written `BaseSessionService` on async Firestore, laid out as `adk_sessions/{app}/users/{user}/sessions/{session}/events/{event}`. Two non-obvious details: Firestore rejects field names wrapped in `__`, so state keys are escaped via `_Z_...._Z_` (`_encode_key`/`_decode_key`); and each `append_event` denormalizes a `last_message_preview` / `message_count` summary onto the session doc for backoffice listing. `State.TEMP_PREFIX` keys are never persisted.
 
 [services.py](services.py) registers this service against the `firestore://` URI scheme with ADK's service registry. [main.py](main.py) decides whether to use it: in `APP_ENV=development` outside Cloud Run (`K_SERVICE` unset) it falls back to in-memory sessions so local dev doesn't require ADC; `USE_FIRESTORE_SESSIONS` overrides either way. Note `main.py` does not import `services.py` — if the `firestore://` scheme fails to resolve, that registration is the thing to check.
@@ -52,8 +65,5 @@ An ADK (Google Agent Development Kit) natural-language-to-SQL agent served as a 
 
 `todo.txt` tracks the open work (in Portuguese: chat compaction, token/temperature tuning, per-helper SQL validation tests, AI-as-judge for expensive queries). Beyond that, several seams are stubbed or broken and will bite before anything runs end to end:
 
-- `root_agent.tools` does not actually include the BigQuery sub-agent, though its prompt tells it to call one — the `AgentTool` wiring is missing.
-- `prompts.py::dynamic_instruction` does `"" + build_timezone_metadata()`, concatenating a str with a dict (`TypeError`).
-- `bq.py::get_bq_client` reads a `_BQ_CLIENT` global that is never defined (`NameError`).
-- `context.py::rag` is an empty stub, but is wired as `before_model_callback`.
 - `config.py::excluded_branches_set` references a `rede_excluded_branches` field that does not exist on `Settings`.
+- `run_sql_query` sets no `maximum_bytes_billed`. Aggregations scan the whole table regardless of `LIMIT` — a `GROUP BY` over `air_quality_annual_summary` bills ~148 MB, and the hourly tables are 100× larger.
