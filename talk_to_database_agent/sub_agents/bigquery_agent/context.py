@@ -1,2 +1,4 @@
-def rag():
-    pass
+def retriver():
+    return """
+    # CONTEXT DATABASE
+    """

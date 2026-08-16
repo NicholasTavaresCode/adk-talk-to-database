@@ -3,7 +3,7 @@ from google.adk.agents import Agent
 from google.genai import types
 from talk_to_database_agent.app_utils.models import GEMINI_MODEL
 from talk_to_database_agent.app_utils.math import MATH_TOOLS
-from .context import rag
+from .context import retriver
 from .prompts import dynamic_instruction
 from .tools import run_sql_query
 
@@ -11,7 +11,7 @@ bigquery_agent = Agent(
     name="bigquery_agent",
     model=GEMINI_MODEL,
     description=("AI agent that can translate natural language queries into BigQuery SQL and execute them."),
-    before_model_callback=rag,
+    before_model_callback=retriver,
     static_instruction="""
     # IDENTITY
     - You are an AI assistant serving as a SQL expert for BigQuery.
