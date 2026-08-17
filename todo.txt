@@ -6,5 +6,13 @@
 - Adicionar testes para cada função auxiliar de checagem de sql no bigquery
 - Teste para nunca acontecer de uma resposta passar da janela de contexto
 - Adicionar AI as a Judge para evitar queries caras
-- Ver qual o tamanho do chunk ideal para embedding
+
+
+# Para hoje
 - Ver qual o problema de performance no prompt
+- Ver qual o tamanho do chunk ideal para embedding
+- Prompt engineering
+- Criar testes básicos com golden dataset
+- Ver o Agente Registry
+- Ver a diferença clara entre agent as a tool e subagent
+- Criar teste de segurança de prompt

@@ -1,4 +1,4 @@
-import logging, os, warnings
+import logging, os
 from fastapi import FastAPI
 from google.adk.cli.fast_api import get_fast_api_app
 from talk_to_database_agent.app_utils.config import settings
@@ -29,6 +29,7 @@ if session_uri is None and settings.firestore_database:
 app: FastAPI = get_fast_api_app(
     agents_dir=AGENT_DIR,
     session_service_uri=session_uri,
+
     web=True,
 )
 

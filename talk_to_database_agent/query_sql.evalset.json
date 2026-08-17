@@ -1,0 +1,49 @@
+{
+  "eval_set_id": "query_sql",
+  "name": "query_sql",
+  "description": "This eval set contains conversations that test the agent's ability to query a database using SQL.",
+  "eval_cases": [
+    {
+      "eval_id": "session_01",
+      "conversation": [
+        {
+          "invocation_id": "e-0067f6c4-ac27-4f24-81d7-3ab994c28768",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Which 10 locations have had the worst air quality this month (as measured by high PM10)?"
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "Based on the latest available data (May 2026), here are the 10 locations with the highest average daily PM10 concentrations (worst air quality):\n\nRank | Location | Site Name | Avg PM10 Concentration (µg/m³)\n1 | Buffalo, Scott County, Iowa | BUFFALO, LW MINING | 42.46\n2 | Fort McDowell, Maricopa County, Arizona | Fort McDowell/Yuma Frank | 37.55\n3 | Fort Dodge, Webster County, Iowa | Day Park | 33.94\n4 | Bannock County, Idaho | BALLARD ROAD | 26.86\n5 | Des Moines, Polk County, Iowa | CARPENTER | 25.47\n6 | Cedar Rapids, Linn County, Iowa | Public Health | 23.13\n7 | Salt Lake City, Salt Lake County, Utah | Utah Technical Center | 22.18\n8 | Magna, Salt Lake County, Utah | UTM COORDINATES AT PROBE LOCATION | 20.60\n9 | Weeping Water, Cass County, Nebraska | (N/A) | 20.19\n10 | Fresno County, California | Table Mountain Air Monitoring Site | 20.12"
+              }
+            ],
+            "role": null
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "id": "adk-1a3f5a01-1782-4530-949f-07cf53fc6f05",
+                "args": {
+                  "request": "Which 10 locations have had the worst air quality in August 2026 (or the most recent available month up to August 2026) as measured by high PM10?"
+                },
+                "name": "bigquery_agent"
+              }
+            ],
+            "intermediate_responses": []
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "talk_to_database",
+        "user_id": "user",
+        "state": {}
+      }
+    }
+  ],
+  "creation_timestamp": 1786931852.399144
+}

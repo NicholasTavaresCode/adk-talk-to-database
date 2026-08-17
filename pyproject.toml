@@ -17,6 +17,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "google-adk[eval]>=2.6.3",
     "pytest>=8.3.4",
     "pytest-asyncio>=0.23.8",
     "respx>=0.21.0",
