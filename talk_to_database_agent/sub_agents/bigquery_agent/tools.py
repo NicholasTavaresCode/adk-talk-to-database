@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import datetime
 import decimal
@@ -7,6 +8,9 @@ import re
 from typing import Any
 
 from google.adk.agents import Context
+from google.cloud import bigquery
+
+from talk_to_database_agent.app_utils.config import settings
 from talk_to_database_agent.sub_agents.bigquery_agent.bq import get_bq_client
 
 logger = logging.getLogger(__name__)
@@ -149,22 +153,139 @@ def sanitize_rows(rows: list[list[Any]]) -> list[list[Any]]:
     return [[sanitize_value(value) for value in row] for row in rows]
 
 
-def check_sql_read_only(sql: str) -> bool:
-    """Verifica se a query SQL é somente leitura (SELECT)."""
-    forbidden_keywords = ["INSERT", "UPDATE", "DELETE", "CREATE", "DROP", "ALTER"]
-    sql_upper = sql.upper()
-    return not any(keyword in sql_upper for keyword in forbidden_keywords)
+# Só estes dois abrem uma query de leitura em GoogleSQL. Como `sanitize_sql` já
+# rejeitou múltiplos statements, checar a primeira palavra é suficiente para
+# barrar DDL/DML — inclusive `EXPORT DATA ... AS SELECT`, que uma denylist de
+# palavras-chave deixava passar.
+_READ_ONLY_STATEMENTS = frozenset({"SELECT", "WITH"})
 
-def run_sql_query(
+# Defesa em profundidade: nenhuma destas pode aparecer como palavra inteira no
+# corpo da query. `\b` é o que evita o falso positivo — `updated_at` não casa
+# com `\bUPDATE\b`, `created_date` não casa com `\bCREATE\b`.
+_FORBIDDEN_KEYWORD_RE = re.compile(
+    r"\b(?:INSERT|UPDATE|DELETE|MERGE|CREATE|DROP|ALTER|TRUNCATE"
+    r"|GRANT|REVOKE|EXPORT|LOAD|CALL|DECLARE|EXECUTE)\b",
+    re.IGNORECASE,
+)
+
+
+def check_sql_read_only(sql: str) -> bool:
+    """Verifica se a query SQL é somente leitura (SELECT).
+
+    A checagem roda sobre a query mascarada por `_mask_literals_and_comments`,
+    não sobre o texto cru: senão `WHERE city = 'Update Springs'` ou um
+    comentário `-- create a summary` derrubavam um SELECT perfeitamente válido.
+
+    Args:
+        sql: A query já normalizada por sanitize_sql.
+
+    Returns:
+        True se a query for somente leitura.
+    """
+    masked = _mask_literals_and_comments(sql).strip()
+
+    # `(SELECT ...) UNION ALL (SELECT ...)` é leitura e começa com parêntese.
+    masked = masked.lstrip("( \t\r\n")
+
+    first_word = re.match(r"[A-Za-z_]+", masked)
+    if not first_word or first_word.group(0).upper() not in _READ_ONLY_STATEMENTS:
+        return False
+
+    return not _FORBIDDEN_KEYWORD_RE.search(masked)
+
+
+def format_bytes(num_bytes: int) -> str:
+    """Formata uma contagem de bytes para caber numa mensagem de erro."""
+    value = float(num_bytes)
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if abs(value) < 1024.0 or unit == "TB":
+            return f"{value:.2f} {unit}" if unit != "B" else f"{int(value)} B"
+        value /= 1024.0
+    return f"{value:.2f} TB"
+
+
+def _estimate_bytes(bq: bigquery.Client, sql: str) -> int:
+    """Quantos bytes a query varreria, via dry run (não é cobrado)."""
+    job = bq.query(
+        sql,
+        job_config=bigquery.QueryJobConfig(dry_run=True, use_query_cache=False),
+    )
+    return job.total_bytes_processed or 0
+
+
+def _run_sql_query_blocking(sql: str) -> dict:
+    """Faz o trabalho bloqueante no BigQuery. Roda numa thread — ver run_sql_query."""
+    bq = get_bq_client()
+    max_bytes = settings.bq_max_bytes_billed
+
+    # O dry run é gratuito e permite devolver um erro que o modelo consegue
+    # corrigir ("reduza o período", "selecione menos colunas"), em vez do 400
+    # opaco que `maximum_bytes_billed` produz depois que a query já falhou.
+    estimated_bytes = _estimate_bytes(bq, sql)
+    if estimated_bytes > max_bytes:
+        logger.warning(
+            "Query rejeitada por custo: %s > limite de %s",
+            format_bytes(estimated_bytes),
+            format_bytes(max_bytes),
+        )
+        return {
+            "status": "error",
+            "error": (
+                f"Esta query varreria {format_bytes(estimated_bytes)}, acima do "
+                f"limite de {format_bytes(max_bytes)}. Lembre que LIMIT não "
+                "reduz os bytes lidos: restrinja as colunas do SELECT (evite "
+                "`SELECT *`) e filtre a coluna de data/partição no WHERE."
+            ),
+            "sql": sql,
+            "estimated_bytes": estimated_bytes,
+            "max_bytes_billed": max_bytes,
+        }
+
+    logger.info(
+        "Executing BigQuery SQL (est. %s)… %s", format_bytes(estimated_bytes), sql
+    )
+    # `maximum_bytes_billed` é a rede de segurança: a estimativa do dry run pode
+    # ficar defasada se a tabela crescer entre as duas chamadas.
+    query_job = bq.query(
+        sql,
+        job_config=bigquery.QueryJobConfig(
+            maximum_bytes_billed=max_bytes,
+            job_timeout_ms=int(settings.bq_query_timeout_seconds * 1000),
+        ),
+    )
+    result = query_job.result()
+
+    columns = [field.name for field in result.schema]
+    rows = sanitize_rows([list(row.values()) for row in result])
+
+    logger.info(
+        "Query returned %d rows, billed %s",
+        len(rows),
+        format_bytes(query_job.total_bytes_billed or 0),
+    )
+
+    return {
+        "status": "success",
+        "columns": columns,
+        "rows": rows,
+        "row_count": len(rows),
+        "bytes_billed": query_job.total_bytes_billed or 0,
+    }
+
+
+async def run_sql_query(
     sql: str,
     tool_context: Context
 ) -> dict:
     """Executa uma query SQL somente leitura no warehouse BigQuery.
 
     Use esta ferramenta DEPOIS de identificar as tabelas e colunas corretas
-    via search_database_context. Apenas queries SELECT são permitidas —
-    INSERT, UPDATE, DELETE, DDL e qualquer operação de escrita serão
-    rejeitadas.
+    no schema fornecido. Apenas queries SELECT são permitidas — INSERT,
+    UPDATE, DELETE, DDL e qualquer operação de escrita serão rejeitadas.
+
+    Há um limite de bytes varridos por query. LIMIT não reduz os bytes lidos:
+    para ficar dentro do limite, selecione apenas as colunas necessárias e
+    filtre a coluna de data no WHERE.
 
     Args:
         sql: A query SQL SELECT a executar. DEVE usar nomes de tabelas
@@ -193,14 +314,10 @@ def run_sql_query(
         }
 
     try:
-        bq = get_bq_client()
-        logger.info("Executing BigQuery SQL… %s", sql)
-        query_job = bq.query(sql)
-        result = query_job.result()
-
-        columns = [field.name for field in result.schema]
-        rows = [list(row.values()) for row in result]
-        rows = sanitize_rows(rows)
+        # O cliente do BigQuery é síncrono e uma query leva segundos. Chamada
+        # direta, ela travaria o event loop inteiro do uvicorn — nenhuma outra
+        # requisição avança enquanto ela roda.
+        return await asyncio.to_thread(_run_sql_query_blocking, sql)
     except Exception as exc:
         logger.exception("BigQuery execution failed")
         return {
@@ -208,15 +325,3 @@ def run_sql_query(
             "error": f"BigQuery execution failed: {exc}",
             "sql": sql,
         }
-
-    logger.info("Query returned %d rows", len(rows))
-
-    response: dict = {
-        "status": "success",
-        "columns": columns,
-        "rows": rows,
-        "row_count": len(rows),
-    }
-
-
-    return response

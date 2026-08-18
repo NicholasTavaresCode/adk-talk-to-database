@@ -8,8 +8,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
-from talk_to_database_agent.agent import root_agent
-from talk_to_database_agent.sub_agents.bigquery_agent import bigquery_agent
+from talk_to_database_agent.sub_agents.bigquery_agent.agent import bigquery_agent
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 

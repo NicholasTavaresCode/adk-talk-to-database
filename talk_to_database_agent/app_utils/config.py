@@ -24,6 +24,22 @@ class Settings(BaseSettings):
     bq_datasets: str = ""
     bq_location: str = "us-east1"
 
+    # ── BigQuery cost controls ───────────────────────────────────────────
+    # `LIMIT` does not reduce bytes scanned, so an unbounded query is not made
+    # cheap by asking for 10 rows. Measured against the configured dataset
+    # (bigquery-public-data.epa_historical_air_quality, 554 GB over 32 tables):
+    #
+    #   0.17 GB  "top 10 PM10 sites in May 2026"  (the eval query)
+    #  11.42 GB  full GROUP BY on one column of o3_hourly_summary
+    # 118.16 GB  SELECT * FROM o3_hourly_summary LIMIT 10
+    #
+    # 20 GB blocks the last of those while leaving the legitimate shapes ~100x
+    # and ~2x of headroom respectively.
+    bq_max_bytes_billed: int = 20 * 1024**3
+    # Server-side cap: BigQuery cancels the job itself, rather than us merely
+    # giving up on waiting for it.
+    bq_query_timeout_seconds: float = 120.0
+
     @property
     def bq_datasets_list(self) -> list[str]:
         return [d.strip() for d in self.bq_datasets.split(",") if d.strip()]

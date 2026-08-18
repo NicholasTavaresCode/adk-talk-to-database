@@ -28,6 +28,9 @@ dev = [
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "bigquery_agent: live integration test; needs ADC, Vertex AI and BigQuery. Deselect with -m 'not bigquery_agent'.",
+]
 
 [tool.uv]
 package = false

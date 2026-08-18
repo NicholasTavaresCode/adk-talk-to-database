@@ -114,7 +114,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--eval-set-id", default="query_sql")
     parser.add_argument(
         "--app-name",
-        default="talk_to_database",
+        # `adk eval` derives its app name from the agent directory
+        # (`os.path.basename(agent_module_file_path)`), so anything else here
+        # makes the recorded case run under a different session app name than
+        # the one the eval reports against.
+        default="talk_to_database_agent",
         help="Must match session_input.app_name used by the eval runner.",
     )
     parser.add_argument(

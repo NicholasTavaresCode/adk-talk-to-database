@@ -1,6 +1,57 @@
 {
-    "criteria": {
-        "tool_trajectory_avg_score": 0.8,
-        "response_match_score": 0.7
+  "criteria": {
+    "rubric_based_tool_use_quality_v1": {
+      "threshold": 1.0,
+      "judge_model_options": {
+        "judge_model": "gemini-2.5-flash",
+        "num_samples": 3
+      },
+      "rubrics": [
+        {
+          "rubric_id": "delegates_to_bigquery_agent",
+          "type": "TOOL_USE_QUALITY",
+          "rubric_content": {
+            "text_property": "The agent calls the `bigquery_agent` tool to obtain the data, instead of answering the data question from its own knowledge."
+          }
+        },
+        {
+          "rubric_id": "request_preserves_user_intent",
+          "type": "TOOL_USE_QUALITY",
+          "rubric_content": {
+            "text_property": "The agent makes at least one `bigquery_agent` call, and the request it passes preserves the user's intent: the ranking direction (worst / highest), the number of locations asked for, the pollutant (PM10) and the time period named in the question. If the agent made no `bigquery_agent` call at all, this property is not fulfilled."
+          }
+        }
+      ]
+    },
+    "rubric_based_final_response_quality_v1": {
+      "threshold": 1.0,
+      "judge_model_options": {
+        "judge_model": "gemini-2.5-flash",
+        "num_samples": 3
+      },
+      "rubrics": [
+        {
+          "rubric_id": "ranks_ten_locations",
+          "type": "FINAL_RESPONSE_QUALITY",
+          "rubric_content": {
+            "text_property": "The response reports ten locations for May 2026, ordered from the highest average PM10 concentration to the lowest."
+          }
+        },
+        {
+          "rubric_id": "top_location_matches_golden",
+          "type": "FINAL_RESPONSE_QUALITY",
+          "rubric_content": {
+            "text_property": "The worst location reported has an average PM10 of approximately 42.46 ug/m3 and is in Scott County, Iowa."
+          }
+        },
+        {
+          "rubric_id": "tenth_location_matches_golden",
+          "type": "FINAL_RESPONSE_QUALITY",
+          "rubric_content": {
+            "text_property": "The tenth-ranked location reported has an average PM10 of approximately 20.12 ug/m3 and is in Fresno County, California."
+          }
+        }
+      ]
     }
+  }
 }
