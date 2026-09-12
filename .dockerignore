@@ -1,0 +1,16 @@
+**/.venv/
+**/__pycache__/
+**/*.pyc
+.env
+*.env
+**/data/
+**/*.duckdb
+**/*.pdf
+**/*.drawio
+example/
+agent-engine/
+cloud-run/
+administracao-contratual/
+sharepoint_agent/
+uc1-context-engine/
+.git/

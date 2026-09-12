@@ -1,4 +1,5 @@
-import math, logging
+import logging
+import math
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,6 @@ def calculate(expression: str) -> dict:
         "sum": sum,
         "len": len,
         "pow": pow,
-        # math module functions
         "sqrt": math.sqrt,
         "ceil": math.ceil,
         "floor": math.floor,
@@ -64,7 +64,6 @@ def calculate(expression: str) -> dict:
         logger.exception("calculate failed for: %r", expression)
         return {"status": "error", "error": f"Cálculo falhou: {exc}"}
 
-
 def percentage_change(old_value: float, new_value: float) -> dict:
     """Calcula a variação percentual entre dois valores.
 
@@ -98,7 +97,6 @@ def percentage_change(old_value: float, new_value: float) -> dict:
         "direction": "aumento" if diff > 0 else "redução" if diff < 0 else "sem alteração",
     }
 
-
 def proportion(part: float, total: float) -> dict:
     """Calcula qual percentual uma parte representa do total.
 
@@ -124,6 +122,5 @@ def proportion(part: float, total: float) -> dict:
         "total": total,
         "percentage": round(pct, 2),
     }
-
 
 MATH_TOOLS = [calculate, percentage_change, proportion]

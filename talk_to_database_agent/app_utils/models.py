@@ -1,7 +1,7 @@
 import os
+
 from google.adk.models import Gemini
-from google.genai import Client
-from google.genai import types
+from google.genai import Client, types
 
 _RETRY_OPTIONS = types.HttpRetryOptions(
     attempts=5,
@@ -10,7 +10,7 @@ _RETRY_OPTIONS = types.HttpRetryOptions(
     exp_base=1.5,
 )
 
-GEMINI_MODEL = Gemini(model="gemini-3.6-flash", retry_options=_RETRY_OPTIONS)
+GEMINI_MODEL = Gemini(model="gemini-3.7-flash", retry_options=_RETRY_OPTIONS)
 
 GEMINI_MODEL.api_client = Client(
     vertexai=True,

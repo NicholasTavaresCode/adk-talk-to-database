@@ -15,12 +15,10 @@ from talk_to_database_agent.sub_agents.bigquery_agent.bq import get_bq_client
 
 logger = logging.getLogger(__name__)
 
-# O LLM costuma devolver a query dentro de um bloco markdown.
 _MARKDOWN_FENCE_RE = re.compile(
     r"```[ \t]*(?:sql|bigquery|googlesql)?[ \t]*\r?\n?(.*?)```",
     re.DOTALL | re.IGNORECASE,
 )
-
 
 def _strip_markdown_fence(sql: str) -> str:
     """Extrai a query de dentro de um bloco markdown, se houver."""
@@ -28,7 +26,6 @@ def _strip_markdown_fence(sql: str) -> str:
     if match:
         return match.group(1)
 
-    # Bloco aberto e nunca fechado: remove só a cerca inicial.
     stripped = sql.strip()
     if stripped.startswith("```"):
         return re.sub(
@@ -38,7 +35,6 @@ def _strip_markdown_fence(sql: str) -> str:
             flags=re.IGNORECASE,
         )
     return sql
-
 
 def _mask_literals_and_comments(sql: str) -> str:
     """Troca strings, identificadores citados e comentários por espaços.
@@ -88,7 +84,6 @@ def _mask_literals_and_comments(sql: str) -> str:
 
     return "".join(masked)
 
-
 def sanitize_sql(sql: str) -> str:
     """Normaliza a query SQL gerada pelo LLM antes de validar e executar.
 
@@ -110,8 +105,6 @@ def sanitize_sql(sql: str) -> str:
         raise ValueError("A query SQL está vazia.")
 
     cleaned = _strip_markdown_fence(sql).strip()
-    # Ponto e vírgula final é inofensivo, mas remover simplifica a checagem
-    # de múltiplos statements abaixo.
     cleaned = re.sub(r"[;\s]+$", "", cleaned)
 
     if not cleaned:
@@ -125,13 +118,11 @@ def sanitize_sql(sql: str) -> str:
 
     return cleaned
 
-
 def sanitize_value(value: Any) -> Any:
     """Converte um valor do BigQuery em algo serializável em JSON."""
     if value is None or isinstance(value, (bool, int, str)):
         return value
     if isinstance(value, float):
-        # NaN/Infinity não são JSON válido.
         return value if math.isfinite(value) else None
     if isinstance(value, decimal.Decimal):
         return float(value)
@@ -147,27 +138,17 @@ def sanitize_value(value: Any) -> Any:
         return [sanitize_value(item) for item in value]
     return str(value)
 
-
 def sanitize_rows(rows: list[list[Any]]) -> list[list[Any]]:
     """Converte as linhas do BigQuery em tipos serializáveis em JSON."""
     return [[sanitize_value(value) for value in row] for row in rows]
 
-
-# Só estes dois abrem uma query de leitura em GoogleSQL. Como `sanitize_sql` já
-# rejeitou múltiplos statements, checar a primeira palavra é suficiente para
-# barrar DDL/DML — inclusive `EXPORT DATA ... AS SELECT`, que uma denylist de
-# palavras-chave deixava passar.
 _READ_ONLY_STATEMENTS = frozenset({"SELECT", "WITH"})
 
-# Defesa em profundidade: nenhuma destas pode aparecer como palavra inteira no
-# corpo da query. `\b` é o que evita o falso positivo — `updated_at` não casa
-# com `\bUPDATE\b`, `created_date` não casa com `\bCREATE\b`.
 _FORBIDDEN_KEYWORD_RE = re.compile(
     r"\b(?:INSERT|UPDATE|DELETE|MERGE|CREATE|DROP|ALTER|TRUNCATE"
     r"|GRANT|REVOKE|EXPORT|LOAD|CALL|DECLARE|EXECUTE)\b",
     re.IGNORECASE,
 )
-
 
 def check_sql_read_only(sql: str) -> bool:
     """Verifica se a query SQL é somente leitura (SELECT).
@@ -184,7 +165,6 @@ def check_sql_read_only(sql: str) -> bool:
     """
     masked = _mask_literals_and_comments(sql).strip()
 
-    # `(SELECT ...) UNION ALL (SELECT ...)` é leitura e começa com parêntese.
     masked = masked.lstrip("( \t\r\n")
 
     first_word = re.match(r"[A-Za-z_]+", masked)
@@ -192,7 +172,6 @@ def check_sql_read_only(sql: str) -> bool:
         return False
 
     return not _FORBIDDEN_KEYWORD_RE.search(masked)
-
 
 def format_bytes(num_bytes: int) -> str:
     """Formata uma contagem de bytes para caber numa mensagem de erro."""
@@ -203,7 +182,6 @@ def format_bytes(num_bytes: int) -> str:
         value /= 1024.0
     return f"{value:.2f} TB"
 
-
 def _estimate_bytes(bq: bigquery.Client, sql: str) -> int:
     """Quantos bytes a query varreria, via dry run (não é cobrado)."""
     job = bq.query(
@@ -212,15 +190,11 @@ def _estimate_bytes(bq: bigquery.Client, sql: str) -> int:
     )
     return job.total_bytes_processed or 0
 
-
 def _run_sql_query_blocking(sql: str) -> dict:
     """Faz o trabalho bloqueante no BigQuery. Roda numa thread — ver run_sql_query."""
     bq = get_bq_client()
     max_bytes = settings.bq_max_bytes_billed
 
-    # O dry run é gratuito e permite devolver um erro que o modelo consegue
-    # corrigir ("reduza o período", "selecione menos colunas"), em vez do 400
-    # opaco que `maximum_bytes_billed` produz depois que a query já falhou.
     estimated_bytes = _estimate_bytes(bq, sql)
     if estimated_bytes > max_bytes:
         logger.warning(
@@ -244,8 +218,6 @@ def _run_sql_query_blocking(sql: str) -> dict:
     logger.info(
         "Executing BigQuery SQL (est. %s)… %s", format_bytes(estimated_bytes), sql
     )
-    # `maximum_bytes_billed` é a rede de segurança: a estimativa do dry run pode
-    # ficar defasada se a tabela crescer entre as duas chamadas.
     query_job = bq.query(
         sql,
         job_config=bigquery.QueryJobConfig(
@@ -271,7 +243,6 @@ def _run_sql_query_blocking(sql: str) -> dict:
         "row_count": len(rows),
         "bytes_billed": query_job.total_bytes_billed or 0,
     }
-
 
 async def run_sql_query(
     sql: str,
@@ -314,9 +285,6 @@ async def run_sql_query(
         }
 
     try:
-        # O cliente do BigQuery é síncrono e uma query leva segundos. Chamada
-        # direta, ela travaria o event loop inteiro do uvicorn — nenhuma outra
-        # requisição avança enquanto ela roda.
         return await asyncio.to_thread(_run_sql_query_blocking, sql)
     except Exception as exc:
         logger.exception("BigQuery execution failed")

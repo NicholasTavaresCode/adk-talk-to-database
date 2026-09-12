@@ -2,13 +2,13 @@ import datetime
 from zoneinfo import ZoneInfo
 
 MONTH_NAMES = {
-    1: "January", 2: "February", 3: "March", 4: "April",
-    5: "May", 6: "June", 7: "July", 8: "August",
-    9: "September", 10: "October", 11: "November", 12: "December",
+    1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril",
+    5: "Maio", 6: "Junho", 7: "Julho", 8: "Agosto",
+    9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro",
 }
 
 def build_timezone_metadata():
-    """Compute temporal metadata at call time."""
+    """Compute temporal metadata at call time in America/Sao_Paulo."""
     now = datetime.datetime.now(ZoneInfo("America/Sao_Paulo"))
     now_str = now.strftime("%Y-%m-%d %H:%M:%S")
     now_date = now.strftime("%d/%m/%Y")

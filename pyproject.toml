@@ -1,7 +1,7 @@
 [project]
-name = "sales-agent-demo"
+name = "talk-to-database-agent"
 version = "0.1.0"
-description = "Drogaria Exemplo WhatsApp Agent (ADK)"
+description = "Projeto de referência do uso do Google ADK para criar um agente que interage com um banco de dados."
 requires-python = ">=3.11,<3.14"
 
 dependencies = [

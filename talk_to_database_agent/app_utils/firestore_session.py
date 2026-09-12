@@ -11,9 +11,8 @@ from google.adk.sessions.base_session_service import (
 )
 from google.adk.sessions.session import Session
 from google.adk.sessions.state import State
+from google.cloud.firestore_v1 import DELETE_FIELD, async_collection, async_document
 from google.cloud.firestore_v1.async_client import AsyncClient
-from google.cloud.firestore_v1 import DELETE_FIELD
-from google.cloud.firestore_v1 import async_collection, async_document
 from google.cloud.firestore_v1.base_query import BaseQuery
 from google.cloud.firestore_v1.transforms import Increment
 
@@ -21,10 +20,7 @@ logger = logging.getLogger(__name__)
 
 _BATCH_DELETE_SIZE = 500
 
-# Firestore rejects field names that start AND end with `__` (e.g. `__session_metadata__`).
-# We escape such keys using a safe prefix/suffix so they can be stored and round-tripped.
 _ESC_PREFIX = "_Z_"
-
 
 def _encode_key(key: str) -> str:
     """Escape a Firestore-reserved dunder-wrapped field name."""
@@ -32,25 +28,20 @@ def _encode_key(key: str) -> str:
         return _ESC_PREFIX + key[2:-2] + _ESC_PREFIX
     return key
 
-
 def _decode_key(key: str) -> str:
     """Reverse _encode_key."""
     if key.startswith(_ESC_PREFIX) and key.endswith(_ESC_PREFIX) and len(key) > 6:
         return "__" + key[3:-3] + "__"
     return key
 
-
 def _encode_state(state: dict[str, Any]) -> dict[str, Any]:
     return {_encode_key(k): v for k, v in state.items()}
-
 
 def _decode_state(state: dict[str, Any]) -> dict[str, Any]:
     return {_decode_key(k): v for k, v in state.items()}
 
-
 def _normalize_state(state: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in state.items() if value is not None}
-
 
 def _apply_persisted_state_delta(
     session_state: dict[str, Any],
@@ -75,7 +66,6 @@ def _apply_persisted_state_delta(
 
     return updates
 
-
 class FirestoreSessionService(BaseSessionService):
     """ADK session service backed by Google Cloud Firestore (async)."""
 
@@ -87,8 +77,6 @@ class FirestoreSessionService(BaseSessionService):
     ):
         self._db = AsyncClient(project=project, database=database)
         self._collection = collection
-
-    # ── Path helpers ─────────────────────────────────────────────────────
 
     def _session_ref(
         self, app_name: str, user_id: str, session_id: str
@@ -118,8 +106,6 @@ class FirestoreSessionService(BaseSessionService):
     ) -> async_collection.AsyncCollectionReference:
         return self._session_ref(app_name, user_id, session_id).collection("events")
 
-    # ── Internal helpers ─────────────────────────────────────────────────
-
     async def _purge_events(
         self, app_name: str, user_id: str, session_id: str
     ) -> int:
@@ -140,8 +126,6 @@ class FirestoreSessionService(BaseSessionService):
                 total, app_name, user_id, session_id,
             )
         return total
-
-    # ── CRUD ─────────────────────────────────────────────────────────────
 
     async def create_session(
         self,
@@ -202,7 +186,6 @@ class FirestoreSessionService(BaseSessionService):
             last_update_time=float(last_update),
         )
 
-        # Load events
         events_ref = self._events_coll(app_name, user_id, session_id)
 
         if config and config.num_recent_events:
@@ -279,8 +262,6 @@ class FirestoreSessionService(BaseSessionService):
         await self._session_ref(app_name, user_id, session_id).delete()
         logger.info("Deleted Firestore session %s/%s/%s", app_name, user_id, session_id)
 
-    # ── Event persistence ────────────────────────────────────────────────
-
     async def append_event(self, session: Session, event: Event) -> Event:
         if event.partial:
             return event
@@ -304,7 +285,6 @@ class FirestoreSessionService(BaseSessionService):
                 _apply_persisted_state_delta(session.state, event.actions.state_delta)
             )
 
-        # Denormalize preview for backoffice listing
         is_compaction = bool(event.actions and event.actions.compaction)
         if not is_compaction and event.content and event.content.parts:
             text_parts = [

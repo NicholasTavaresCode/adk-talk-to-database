@@ -6,7 +6,6 @@ from talk_to_database_agent.app_utils.utils import build_timezone_metadata
 
 logger = logging.getLogger(__name__)
 
-
 async def dynamic_instruction(readonly_context: ReadonlyContext) -> str:
     """Build the BigQuery agent instruction with fresh datetime metadata.
 
